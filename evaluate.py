@@ -136,7 +136,8 @@ def main(args):
 
     model = GPT(model_config)
     model.load_state_dict(torch.load(args.m, map_location=DEVICE))
-
+    model.to(DEVICE)
+    
     if args.d:
       data = ["this is a dummy sentence."] * 10
     else:

@@ -82,5 +82,3 @@ dmypy.json
 # Test result files
 *.out
 *.err
-
-*.model
