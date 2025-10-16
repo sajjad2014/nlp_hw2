@@ -1,0 +1,6 @@
+torch
+scikit-learn
+tqdm
+numpy
+requests
+regex
