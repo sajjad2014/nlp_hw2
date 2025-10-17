@@ -35,14 +35,12 @@ def get_arguments():
     parser.add_argument("-d", action="store_true", help="pass this flag to eval perplexity on dummy data (use for debugging). works for LM task only.", default=False)
     parser.add_argument("-q", action="store_true", help="pass this flag to suppress tqdm progress bars", default=False)
 
-    parser.add_argument("-max-len", help="pad sequences to this length", default=200, type=int)
-
     return parser.parse_args()
 
 # autograder will call your eval_classification and eval_perplexity functions
 # you shouldn't need to change these unless you want to
 @torch.no_grad
-def eval_classification(data, model, tokenizer, gold_labels=None, bs=32, progress=True, pad_to_len=100):
+def eval_classification(data, model, tokenizer, gold_labels=None, bs=32, progress=True, pad_to_len=200):
     """ 
         Evaluate classification on a dataset.
 
@@ -73,7 +71,7 @@ def eval_classification(data, model, tokenizer, gold_labels=None, bs=32, progres
 # if you change the padding max length, you may need to update the default value
 # assumes data does not include classification labels - if it does, you should strip them off before calling this
 @torch.no_grad
-def eval_perplexity(data, model, tokenizer, bs=32, progress=True, pad_to_len=100):
+def eval_perplexity(data, model, tokenizer, bs=32, progress=True, pad_to_len=200):
     """ 
         Evaluate perplexity on a dataset.
         This implementation originally by Yegor Kuznetsov.
@@ -163,7 +161,7 @@ def main(args):
         label2id = {label: idx for idx, label in enumerate(unique_labels)}
 
         labels = torch.tensor([label2id[label] for label in labels], dtype=torch.long) # map label to id
-        preds, acc = eval_classification(data, model, tokenizer, gold_labels=labels, progress=(not args.q), pad_to_len=args.max_len)
+        preds, acc = eval_classification(data, model, tokenizer, gold_labels=labels, progress=(not args.q))
         # Save the predictions: one label prediction per line
         with open(args.o, "w") as file:
             for pred in preds:
@@ -175,7 +173,7 @@ def main(args):
     
     else:
         # evaluate perplexity
-        perplexity = eval_perplexity(data, model, tokenizer, progress=(not args.q), pad_to_len=args.max_len)
+        perplexity = eval_perplexity(data, model, tokenizer, progress=(not args.q))
         # print out accuracy
         print(f"Perplexity: {perplexity:.5f}")
         return perplexity
