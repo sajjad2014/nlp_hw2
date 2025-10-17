@@ -12,6 +12,8 @@ from collections import defaultdict
 import torch
 from torch.utils.data.dataloader import DataLoader
 from utils import CfgNode as CN
+import copy
+
 
 class Trainer:
 
@@ -31,14 +33,18 @@ class Trainer:
         C.grad_norm_clip = 1.0
         return C
 
-    def __init__(self, config, model, train_dataset, labels=None):
+    def __init__(self, config, model, train_dataset, labels=None, val_dataset=None, val_labels=None):
         self.config = config
         self.model = model
         self.optimizer = None
         self.train_dataset = train_dataset
         self.callbacks = defaultdict(list)
         self.labels = labels # added for CSCI 662 - classification labels
-
+        self.val_dataset = val_dataset
+        self.val_labels = val_labels
+        self.best_val_model = None
+        self.best_acc = -1
+        
         # determine the device we'll train on
         if config.device == 'auto':
             self.device = 'cuda' if torch.cuda.is_available() else 'cpu'
@@ -108,7 +114,6 @@ class Trainer:
             if self.labels is not None:
                 # classification
                 self.logits, self.lm_loss, self.classification_logits, self.classification_loss = model(x, classification_targets=y)
-                print(self.classification_loss)
             else:
                 # language modeling
                 self.logits, self.lm_loss, self.classification_logits, self.classification_loss = model(x, targets=y)
@@ -136,5 +141,21 @@ class Trainer:
             self.iter_time = tnow
 
             # termination conditions
+            
+            if self.iter_num // self.config.iter_per_epoch != (self.iter_num - 1) // self.config.iter_per_epoch:
+                if self.val_dataset is not None:
+                    model.eval()
+                    preds = []
+                    for b_start in range(0, len(self.val_dataset), self.config.batch_size):
+                        batch_data = self.val_dataset[b_start:b_start + self.config.batch_size]
+                        preds += model.classify(batch_data)
+                    preds = torch.tensor(preds)
+                    acc = (preds == self.val_labels).float().mean().item()
+                    if acc > self.best_acc:
+                        self.best_acc = acc
+                        self.best_val_model = copy.deepcopy(model.state_dict())
+                        print(F"Epoch: {self.iter_num // self.config.iter_per_epoch}, Validation Acc: {acc}")
+                        print(F"Best Model Updated")
+                    model.train()
             if config.max_iters is not None and self.iter_num >= config.max_iters:
                 break

@@ -21,6 +21,13 @@ def get_arguments():
     parser.add_argument("-o", help="path of the file where the model is saved", default='best.pretrain.model')
     parser.add_argument("-d", action="store_true", help="pass this flag to train on a small dummy input (use for debugging). works for LM task only.", default=False)
 
+    parser.add_argument("-batch-size", help="training batch size", default=32, type=int)
+    parser.add_argument("-epoch", help="number of training epochs", default=1, type=int)
+    parser.add_argument("-lr", help="training learning rate", default=5e-4, type=float)
+    parser.add_argument("-max-len", help="pad sequences to this length", default=100, type=int)
+
+    parser.add_argument("-val-path", help="path to validation set for classification", default=None)
+    
     return parser.parse_args()
 
 
@@ -49,6 +56,15 @@ if __name__ == "__main__":
         labels = torch.tensor([label2id[line.split('\t')[1]] for line in lines], dtype=torch.long) # map label to id
         tokenized = [tokenizer(line.split('\t')[0]) for line in lines]  # tokenize only the text part
         num_classes = len(label2id)
+        
+        if args.val_path is not None:
+            with open(args.val_path) as f:
+                val_data = [line.strip() for line in f if line.strip()]
+            val_data, val_labels = map(list, zip(*(s.split('\t') for s in val_data)))
+
+        val_labels = torch.tensor([label2id[label] for label in val_labels], dtype=torch.long) # map label to id
+        val_tokenized = [tokenizer(data) for data in val_data]  # tokenize only the text part
+        print("Finished Loading Validation Data")
 
     else:
         # do pretraining - language modeling only
@@ -58,8 +74,13 @@ if __name__ == "__main__":
         num_classes = 0
     
     # pad sequences to same length
-    max_len = 100  # we have not tuned this - you are encouraged to experiment
+    max_len = args.max_len  # we have not tuned this - you are encouraged to experiment
     padded = torch.tensor([pad_to_length(t.squeeze(0).tolist(), max_len, tokenizer.pad_id) for t in tokenized], dtype=torch.long)
+    if args.t == "finetune" and args.val_path is not None:
+        val_padded = torch.tensor([pad_to_length(t.squeeze(0).tolist(), max_len, tokenizer.pad_id) for t in val_tokenized], dtype=torch.long).to(DEVICE)
+    else:
+        val_padded = None
+        val_labels = None
         
     # set up model and Trainer
     model_config = GPT.get_default_config()
@@ -99,13 +120,15 @@ if __name__ == "__main__":
     train_config.num_workers = 2
 
     # We didn't tune the hyperparameters at all, please experiment with these!
-    train_config.learning_rate = 5e-4
-    train_config.batch_size = 32
+    train_config.max_len = args.max_len
+    train_config.learning_rate = args.lr
+    train_config.batch_size = args.batch_size
     # TODO you should probably increase this
-    train_config.max_iters = len(tokenized) // train_config.batch_size  # train for 1 epoch
+    train_config.iter_per_epoch = len(tokenized) // train_config.batch_size
+    train_config.max_iters = args.epoch * train_config.iter_per_epoch
     # train_config.max_iters = 1 # uncomment this for quick debugging
 
-    trainer = Trainer(train_config, model, padded, labels)
+    trainer = Trainer(train_config, model, padded, labels, val_padded, val_labels)
 
     # run training
     model.to(DEVICE)
@@ -127,7 +150,13 @@ if __name__ == "__main__":
     trainer.run()
     bar.close()
 
-    torch.save(model.state_dict(), args.o)
+    # save_path = f"./models/{train_config.max_len}.{train_config.batch_size}.{train_config.learning_rate}.{args.epoch}.model"
+    # torch.save(model.state_dict(), save_path)
+    if trainer.best_val_model is not None:
+        print("Best Model Saved")
+        torch.save(trainer.best_val_model, args.o)
+    else:
+        torch.save(model.state_dict(), args.o)
 
 
 

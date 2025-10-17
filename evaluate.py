@@ -35,6 +35,8 @@ def get_arguments():
     parser.add_argument("-d", action="store_true", help="pass this flag to eval perplexity on dummy data (use for debugging). works for LM task only.", default=False)
     parser.add_argument("-q", action="store_true", help="pass this flag to suppress tqdm progress bars", default=False)
 
+    parser.add_argument("-max-len", help="pad sequences to this length", default=200, type=int)
+
     return parser.parse_args()
 
 # autograder will call your eval_classification and eval_perplexity functions
@@ -161,7 +163,7 @@ def main(args):
         label2id = {label: idx for idx, label in enumerate(unique_labels)}
 
         labels = torch.tensor([label2id[label] for label in labels], dtype=torch.long) # map label to id
-        preds, acc = eval_classification(data, model, tokenizer, gold_labels=labels, progress=(not args.q))
+        preds, acc = eval_classification(data, model, tokenizer, gold_labels=labels, progress=(not args.q), pad_to_len=args.max_len)
         # Save the predictions: one label prediction per line
         with open(args.o, "w") as file:
             for pred in preds:
@@ -173,7 +175,7 @@ def main(args):
     
     else:
         # evaluate perplexity
-        perplexity = eval_perplexity(data, model, tokenizer, progress=(not args.q))
+        perplexity = eval_perplexity(data, model, tokenizer, progress=(not args.q), pad_to_len=args.max_len)
         # print out accuracy
         print(f"Perplexity: {perplexity:.5f}")
         return perplexity
