@@ -6,6 +6,10 @@ from bpe import BPETokenizer, pad_to_length
 from multi_head_attention import init_qkv_proj, self_attention
 import torch
 from tqdm import tqdm
+from zero_multi_head_attention import zero_self_attention
+from shared_multi_head_attention import init_shared_kv, init_shared_qk, init_shared_qkv, init_shared_qv
+from attention_free import simple_attention
+
 
 DEVICE = 'cuda' if torch.cuda.is_available() else 'cpu'
 
@@ -27,6 +31,9 @@ def get_arguments():
     parser.add_argument("-max-len", help="pad sequences to this length", default=100, type=int)
 
     parser.add_argument("-val-path", help="path to validation set for classification", default=None)
+    parser.add_argument("-atten-type", help="type of the attention", default="self", choices=["self", "zero", "shared", "free"])
+    parser.add_argument("-shared-type", help="type of the shared attention", default="QKV", choices=["QKV", "QK", "QV", "KV"])
+
     
     return parser.parse_args()
 
@@ -103,8 +110,28 @@ if __name__ == "__main__":
     model_config.block_size = 1024
 
     # Use the attention function you implemented in the last part
-    model_config.attn_init_fn = init_qkv_proj # we implemented this for you
-    model_config.attn_fn = self_attention # you implemented this
+    if args.atten_type == 'shared':
+        if args.shared_type == "QKV":
+            model_config.attn_init_fn = init_shared_qkv
+        elif args.shared_type == "QK":
+            model_config.attn_init_fn = init_shared_qk
+        elif args.shared_type == "QV":
+            model_config.attn_init_fn = init_shared_qv
+        elif args.shared_type == "KV":
+            model_config.attn_init_fn = init_shared_kv
+        else:
+            model_config.attn_init_fn = init_qkv_proj 
+    else:
+        model_config.attn_init_fn = init_qkv_proj 
+    if args.atten_type == "zero":
+        print("zero attention")
+        model_config.attn_fn = zero_self_attention
+    elif args.atten_type == "free":
+        print("simple attention free transformer")
+        model_config.attn_fn = simple_attention
+    else:
+        model_config.attn_fn = self_attention 
+
 
     # handle num classes for classification
     # will init a new classification head if the pretrained model doesn't have one
